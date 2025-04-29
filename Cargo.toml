@@ -1,0 +1,12 @@
+[package]
+name = "thread-per-core"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+core_affinity = "0.8.3"
+crossbeam-channel = "0.5"
+ctrlc = "3.4.6"
+socket2 = "0.5.9"
+syslog_loose = "0.21.0"
+tokio = { version = "1", features = ["full"] }
