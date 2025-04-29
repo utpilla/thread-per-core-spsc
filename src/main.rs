@@ -26,13 +26,7 @@ struct Stats {
     padding: [u64; 15],
 }
 
-#[allow(static_mut_refs)]
-fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // Get available CPU core IDs
-    let core_ids = core_affinity::get_core_ids().expect("Failed to get core IDs");
-    let core_count = core_ids.len();
-    println!("Detected {} CPU cores", core_count);
-
+fn create_socket() -> socket2::Socket {
     let address : SocketAddr = "127.0.0.1:50005".parse().unwrap();
 
     // Create a SO_REUSEADDR + SO_REUSEPORT listener.
@@ -42,6 +36,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     socket.set_reuse_port(true).unwrap();
     socket.set_nonblocking(true).unwrap();
     socket.bind(&address.into()).unwrap();
+    socket
+}
+
+#[allow(static_mut_refs)]
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    // Get available CPU core IDs
+    let core_ids = core_affinity::get_core_ids().expect("Failed to get core IDs");
+    let core_count = core_ids.len();
+    println!("Detected {} CPU cores", core_count);
 
     let shared_mutable_received_stats: UnsafeSlice;
     let shared_mutable_dropped_stats: UnsafeSlice;
@@ -78,9 +81,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             // Create a SPSC channel for communication between receiver and worker
             let (sender, receiver) = bounded::<Vec<u8>>(CHANNEL_CAPACITY);
             
-            // Clone the socket for this thread
-            let thread_socket = socket.try_clone().unwrap();
-            
             // Spawn worker thread first
             let worker_core_id = core_id.clone();
             let _worker_handle = s.spawn(move || {
@@ -113,13 +113,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 
                 // Start the UDP receiver in this runtime
                 rt.block_on(async {
-                    if let Err(e) = receive_udp(thread_socket.into(), sender, idx, shared_mutable_received_stats, shared_mutable_dropped_stats).await {
+                    if let Err(e) = receive_udp(create_socket().into(), sender, idx, shared_mutable_received_stats, shared_mutable_dropped_stats).await {
                         println!("UDP receiver {} error: {}", idx, e);
                     }
                 });
             });
         }
-
     });
 
     Ok(())
